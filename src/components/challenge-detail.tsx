@@ -75,10 +75,13 @@ export function ChallengeDetail({
       <header className="detail-hero">
         <div>
           <span className={`status-pill ${stats.status.toLowerCase()}`}>{stats.status}</span>
-          <input
+          <h1 className="sr-only" id="challenge-title">
+            {checklist.title}
+          </h1>
+          <textarea
             aria-label="Challenge title"
             className="hero-title-input"
-            id="challenge-title"
+            rows={2}
             value={checklist.title}
             onChange={(event) => onRename(checklist, event.target.value)}
           />
