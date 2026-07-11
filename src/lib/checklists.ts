@@ -92,6 +92,23 @@ export function markChallengeDay(
   });
 }
 
+export function setChallengeDay(
+  checklist: Checklist,
+  date: string,
+  status: ChallengeDayStatus,
+): Checklist {
+  const dayRecords = getDayRecords(checklist);
+  const nextRecord = createDayRecord(date, status);
+  const hasRecord = dayRecords.some((record) => record.date === date);
+
+  return withChecklistUpdate({
+    ...normalizeChecklist(checklist),
+    dayRecords: hasRecord
+      ? dayRecords.map((record) => (record.date === date ? nextRecord : record))
+      : [...dayRecords, nextRecord],
+  });
+}
+
 export function getChallengeStats(checklist: Checklist, todayKey = getTodayKey()) {
   const normalized = normalizeChecklist(checklist);
   const startDate = normalized.startDate ?? todayKey;

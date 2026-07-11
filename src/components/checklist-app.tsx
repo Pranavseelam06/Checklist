@@ -7,6 +7,7 @@ import {
   BarChart3,
   CalendarDays,
   Check,
+  CheckCircle2,
   ChevronLeft,
   Clock3,
   Flame,
@@ -21,18 +22,21 @@ import {
   Sun,
   Target,
   Trophy,
+  XCircle,
 } from "lucide-react";
 import {
   createChecklist,
   formatDisplayDate,
   getChallengeStats,
+  getDayRecord,
   getTodayKey,
   matchesQuery,
   normalizeChecklist,
+  setChallengeDay,
 } from "@/src/lib/checklists";
 import { getChecklists, saveChecklist } from "@/src/lib/indexed-db";
 import { registerServiceWorker } from "@/src/lib/service-worker";
-import type { Checklist } from "@/src/types";
+import type { ChallengeDayStatus, Checklist } from "@/src/types";
 
 type AppView = "dashboard" | "create" | "detail";
 type NavSection = "Today" | "All Challenges" | "Archive" | "Stats" | "Settings";
@@ -58,6 +62,7 @@ export function ChecklistApp() {
   const [view, setView] = useState<AppView>("dashboard");
   const [activeSection, setActiveSection] = useState<NavSection>("Today");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loggingChallengeId, setLoggingChallengeId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDark, setIsDark] = useState(false);
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -113,6 +118,15 @@ export function ChecklistApp() {
     void saveChecklist(checklist).catch(() => setStorageError("Your latest change could not be saved locally."));
   }
 
+  function replaceChecklist(nextChecklist: Checklist) {
+    setChecklists((current) =>
+      sortChecklists(
+        current.map((checklist) => (checklist.id === nextChecklist.id ? nextChecklist : checklist)),
+      ),
+    );
+    persist(nextChecklist);
+  }
+
   function addChallenge(title: string, durationDays: number, startDate = todayKey) {
     const checklist = createChecklist(title, startDate, durationDays);
     setChecklists((current) => sortChecklists([checklist, ...current]));
@@ -131,6 +145,11 @@ export function ChecklistApp() {
     if (title) {
       addChallenge(title, durationDays, startDate);
     }
+  }
+
+  function logToday(checklist: Checklist, status: ChallengeDayStatus) {
+    replaceChecklist(setChallengeDay(checklist, todayKey, status));
+    setLoggingChallengeId(null);
   }
 
   return (
@@ -218,7 +237,12 @@ export function ChecklistApp() {
                   setSelectedId(id);
                   setView("detail");
                 }}
+                loggingChallengeId={loggingChallengeId}
+                onLogToday={logToday}
                 onQueryChange={setQuery}
+                onToggleLog={(id) =>
+                  setLoggingChallengeId((currentId) => (currentId === id ? null : id))
+                }
                 onTemplateCreate={(title, durationDays) => addChallenge(title, durationDays)}
                 onToggleTheme={() => setIsDark((current) => !current)}
               />
@@ -291,7 +315,10 @@ function DashboardView({
   totalChallenges,
   onCreate,
   onOpen,
+  loggingChallengeId,
+  onLogToday,
   onQueryChange,
+  onToggleLog,
   onTemplateCreate,
   onToggleTheme,
 }: {
@@ -307,7 +334,10 @@ function DashboardView({
   totalChallenges: number;
   onCreate: () => void;
   onOpen: (id: string) => void;
+  loggingChallengeId: string | null;
+  onLogToday: (checklist: Checklist, status: ChallengeDayStatus) => void;
   onQueryChange: (query: string) => void;
+  onToggleLog: (id: string) => void;
   onTemplateCreate: (title: string, durationDays: number) => void;
   onToggleTheme: () => void;
 }) {
@@ -415,8 +445,11 @@ function DashboardView({
               checklist={checklist}
               index={index}
               key={checklist.id}
+              isLogging={loggingChallengeId === checklist.id}
               todayKey={todayKey}
+              onLogToday={(status) => onLogToday(checklist, status)}
               onOpen={() => onOpen(checklist.id)}
+              onToggleLog={() => onToggleLog(checklist.id)}
             />
           ))}
         </div>
@@ -784,33 +817,97 @@ function EmptyState({
 function ChallengeCard({
   checklist,
   index,
+  isLogging,
   todayKey,
+  onLogToday,
   onOpen,
+  onToggleLog,
 }: {
   checklist: Checklist;
   index: number;
+  isLogging: boolean;
   todayKey: string;
+  onLogToday: (status: ChallengeDayStatus) => void;
   onOpen: () => void;
+  onToggleLog: () => void;
 }) {
   const stats = getChallengeStats(checklist, todayKey);
+  const todayRecord = getDayRecord(checklist, todayKey);
+  const canLogToday = stats.status === "Active";
+  const todayLabel =
+    todayRecord?.status === "complete" ? "Yes" : todayRecord?.status === "missed" ? "No" : "Log today";
 
   return (
-    <motion.button
+    <motion.article
       className="group rounded-[28px] border border-stone-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-200 hover:shadow-lift dark:border-white/10 dark:bg-white/[0.06]"
-      type="button"
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, delay: index * 0.04 }}
       whileHover={{ y: -4, scale: 1.01 }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onOpen}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 dark:bg-blue-400/10 dark:text-blue-300">
-          {stats.status}
-        </span>
+        <button
+          className={`inline-flex min-h-9 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-extrabold transition ${
+            canLogToday
+              ? "bg-blue-50 text-blue-700 hover:-translate-y-0.5 hover:bg-blue-100 hover:shadow-sm dark:bg-blue-400/10 dark:text-blue-300 dark:hover:bg-blue-400/20"
+              : "bg-stone-100 text-stone-500 dark:bg-white/10 dark:text-stone-400"
+          }`}
+          disabled={!canLogToday}
+          type="button"
+          onClick={onToggleLog}
+          aria-expanded={isLogging}
+          aria-label={`Log today for ${checklist.title}`}
+        >
+          <span>{stats.status}</span>
+          {canLogToday ? <span className="rounded-full bg-white/80 px-2 py-0.5 dark:bg-white/10">{todayLabel}</span> : null}
+        </button>
         <span className="text-sm font-bold text-stone-400">Day {stats.currentDay || 1}</span>
       </div>
+
+      {isLogging ? (
+        <motion.div
+          className="mt-4 rounded-3xl border border-blue-100 bg-blue-50/70 p-3 dark:border-blue-400/20 dark:bg-blue-400/10"
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.16 }}
+        >
+          <p className="mb-2 text-sm font-black text-stone-800 dark:text-stone-100">
+            Did you do this challenge today?
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl text-sm font-extrabold transition hover:-translate-y-0.5 ${
+                todayRecord?.status === "complete"
+                  ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"
+                  : "bg-white text-emerald-700 hover:shadow-sm dark:bg-white/10 dark:text-emerald-300"
+              }`}
+              type="button"
+              onClick={() => onLogToday("complete")}
+            >
+              <CheckCircle2 size={18} />
+              Yes
+            </button>
+            <button
+              className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl text-sm font-extrabold transition hover:-translate-y-0.5 ${
+                todayRecord?.status === "missed"
+                  ? "bg-rose-600 text-white shadow-lg shadow-rose-600/20"
+                  : "bg-white text-rose-700 hover:shadow-sm dark:bg-white/10 dark:text-rose-300"
+              }`}
+              type="button"
+              onClick={() => onLogToday("missed")}
+            >
+              <XCircle size={18} />
+              No
+            </button>
+          </div>
+          {todayRecord ? (
+            <p className="mt-2 text-xs font-semibold text-stone-500 dark:text-stone-400">
+              Already saved for today. Pick the other option to change it.
+            </p>
+          ) : null}
+        </motion.div>
+      ) : null}
+
       <h3 className="mt-5 text-2xl font-black tracking-[-0.03em]">{checklist.title}</h3>
       <p className="mt-2 text-sm font-semibold text-stone-500">
         {stats.completed}/{stats.durationDays} completed · Started {formatDisplayDate(stats.startDate)}
@@ -818,7 +915,14 @@ function ChallengeCard({
       <div className="mt-6 h-2 overflow-hidden rounded-full bg-stone-100 dark:bg-white/10">
         <div className="h-full rounded-full bg-blue-600 transition-all duration-300" style={{ width: `${stats.percent}%` }} />
       </div>
-    </motion.button>
+      <button
+        className="mt-5 inline-flex min-h-10 items-center justify-center rounded-2xl border border-stone-200 px-4 text-sm font-extrabold text-stone-600 transition hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 hover:shadow-sm dark:border-white/10 dark:text-stone-300 dark:hover:text-blue-300"
+        type="button"
+        onClick={onOpen}
+      >
+        View details
+      </button>
+    </motion.article>
   );
 }
 
