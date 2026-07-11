@@ -614,7 +614,7 @@ function CreateChallengeView({
             Challenge Name
             <input
               autoFocus
-              className="h-13 rounded-2xl border border-stone-200 bg-stone-50 px-4 font-semibold dark:border-white/10 dark:bg-white/10"
+              className="h-12 rounded-2xl border border-stone-200 bg-stone-50 px-4 font-semibold dark:border-white/10 dark:bg-white/10"
               name="title"
               placeholder="Read 20 minutes"
               required
@@ -623,7 +623,7 @@ function CreateChallengeView({
           <label className="grid gap-2 text-sm font-bold">
             Start Date
             <input
-              className="h-13 rounded-2xl border border-stone-200 bg-stone-50 px-4 font-semibold dark:border-white/10 dark:bg-white/10"
+              className="h-12 rounded-2xl border border-stone-200 bg-stone-50 px-4 font-semibold dark:border-white/10 dark:bg-white/10"
               defaultValue={todayKey}
               name="startDate"
               required
@@ -633,7 +633,7 @@ function CreateChallengeView({
           <label className="grid gap-2 text-sm font-bold">
             Duration (days)
             <input
-              className="h-13 rounded-2xl border border-stone-200 bg-stone-50 px-4 font-semibold dark:border-white/10 dark:bg-white/10"
+              className="h-12 rounded-2xl border border-stone-200 bg-stone-50 px-4 font-semibold dark:border-white/10 dark:bg-white/10"
               defaultValue={30}
               min={1}
               name="durationDays"
