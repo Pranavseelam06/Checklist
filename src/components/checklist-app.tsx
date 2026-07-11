@@ -77,15 +77,17 @@ export function ChecklistApp() {
   const filteredChecklists = useMemo(() => {
     return sortChecklists(checklists)
       .filter((checklist) => {
-        if (activeSection === "Archive") {
-          return checklist.archived;
+        switch (activeSection) {
+          case "Archive":
+            return checklist.archived;
+          case "Today":
+            return !checklist.archived && getChallengeStats(checklist, todayKey).status !== "Upcoming";
+          case "All Challenges":
+            return !checklist.archived;
+          case "Stats":
+          case "Settings":
+            return true;
         }
-
-        if (activeSection === "Today") {
-          return !checklist.archived && getChallengeStats(checklist, todayKey).status !== "Upcoming";
-        }
-
-        return activeSection === "All Challenges" || activeSection === "Stats" || activeSection === "Settings";
       })
       .filter((checklist) => matchesQuery(checklist, query));
   }, [activeSection, checklists, query, todayKey]);
@@ -201,10 +203,12 @@ export function ChecklistApp() {
 
             {view === "dashboard" ? (
               <DashboardView
+                activeSection={activeSection}
                 activeChallenges={activeChallenges.length}
                 bestStreak={bestStreak}
                 checklists={filteredChecklists}
                 completionRate={completionRate}
+                isDark={isDark}
                 isLoading={isLoading}
                 query={query}
                 todayKey={todayKey}
@@ -216,6 +220,7 @@ export function ChecklistApp() {
                 }}
                 onQueryChange={setQuery}
                 onTemplateCreate={(title, durationDays) => addChallenge(title, durationDays)}
+                onToggleTheme={() => setIsDark((current) => !current)}
               />
             ) : null}
 
@@ -274,10 +279,12 @@ function HeaderBar({
 }
 
 function DashboardView({
+  activeSection,
   activeChallenges,
   bestStreak,
   checklists,
   completionRate,
+  isDark,
   isLoading,
   query,
   todayKey,
@@ -286,11 +293,14 @@ function DashboardView({
   onOpen,
   onQueryChange,
   onTemplateCreate,
+  onToggleTheme,
 }: {
+  activeSection: NavSection;
   activeChallenges: number;
   bestStreak: number;
   checklists: Checklist[];
   completionRate: number;
+  isDark: boolean;
   isLoading: boolean;
   query: string;
   todayKey: string;
@@ -299,8 +309,12 @@ function DashboardView({
   onOpen: (id: string) => void;
   onQueryChange: (query: string) => void;
   onTemplateCreate: (title: string, durationDays: number) => void;
+  onToggleTheme: () => void;
 }) {
   const isEmpty = totalChallenges === 0;
+  const copy = getSectionCopy(activeSection);
+  const showChallengeSearch = activeSection === "Today" || activeSection === "All Challenges" || activeSection === "Archive";
+  const showChallengeCards = showChallengeSearch;
 
   return (
     <div className="py-6">
@@ -309,27 +323,28 @@ function DashboardView({
           <div className="max-w-3xl">
             <p className="mb-3 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-extrabold uppercase tracking-[0.12em] text-blue-700 dark:bg-blue-400/10 dark:text-blue-300">
               <Sparkles size={14} />
-              Today&apos;s focus
+              {copy.eyebrow}
             </p>
             <h1 className="text-balance text-5xl font-black tracking-[-0.04em] text-stone-950 dark:text-white sm:text-6xl lg:text-7xl">
-              A calmer way to keep promises to yourself.
+              {copy.title}
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-stone-600 dark:text-stone-300 sm:text-lg">
-              Track personal challenges without accounts, sync, or clutter. Every list stays fast,
-              private, and available offline.
+              {copy.subtitle}
             </p>
           </div>
 
-          <label className="relative block max-w-xl">
-            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-            <input
-              className="h-14 w-full rounded-2xl border border-stone-200 bg-white pl-12 pr-4 text-sm font-semibold text-stone-950 shadow-sm transition placeholder:text-stone-400 hover:border-stone-300 focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:placeholder:text-stone-500"
-              placeholder="Search challenges"
-              value={query}
-              onChange={(event) => onQueryChange(event.target.value)}
-              aria-label="Search challenges"
-            />
-          </label>
+          {showChallengeSearch ? (
+            <label className="relative block max-w-xl">
+              <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+              <input
+                className="h-14 w-full rounded-2xl border border-stone-200 bg-white pl-12 pr-4 text-sm font-semibold text-stone-950 shadow-sm transition placeholder:text-stone-400 hover:border-stone-300 focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:placeholder:text-stone-500"
+                placeholder="Search challenges"
+                value={query}
+                onChange={(event) => onQueryChange(event.target.value)}
+                aria-label="Search challenges"
+              />
+            </label>
+          ) : null}
         </div>
 
         <motion.aside
@@ -376,7 +391,24 @@ function DashboardView({
         <p className="mt-8 text-sm font-semibold text-stone-500">Loading your local challenges...</p>
       ) : null}
 
-      {!isLoading && checklists.length > 0 ? (
+      {!isLoading && activeSection === "Stats" ? (
+        <StatsOverview
+          activeChallenges={activeChallenges}
+          bestStreak={bestStreak}
+          completionRate={completionRate}
+          totalChallenges={totalChallenges}
+        />
+      ) : null}
+
+      {!isLoading && activeSection === "Settings" ? (
+        <SettingsPanel
+          isDark={isDark}
+          totalChallenges={totalChallenges}
+          onToggleTheme={onToggleTheme}
+        />
+      ) : null}
+
+      {!isLoading && showChallengeCards && checklists.length > 0 ? (
         <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {checklists.map((checklist, index) => (
             <ChallengeCard
@@ -390,11 +422,59 @@ function DashboardView({
         </div>
       ) : null}
 
-      {!isLoading && checklists.length === 0 ? (
-        <EmptyState onCreate={onCreate} onTemplateCreate={onTemplateCreate} />
+      {!isLoading && showChallengeCards && checklists.length === 0 ? (
+        activeSection === "Archive" ? (
+          <SectionEmptyState
+            icon={Archive}
+            title="No archived challenges"
+            description="Finished or paused challenges will appear here when you archive them."
+          />
+        ) : (
+          <EmptyState onCreate={onCreate} onTemplateCreate={onTemplateCreate} />
+        )
       ) : null}
     </div>
   );
+}
+
+function getSectionCopy(section: NavSection) {
+  switch (section) {
+    case "Today":
+      return {
+        eyebrow: "Today's focus",
+        title: "A calmer way to keep promises to yourself.",
+        subtitle:
+          "Track personal challenges without accounts, sync, or clutter. Every list stays fast, private, and available offline.",
+      };
+    case "All Challenges":
+      return {
+        eyebrow: "All challenges",
+        title: "Everything you are tracking, neatly in one place.",
+        subtitle:
+          "Browse every active challenge, search by name, and jump back into the commitment that needs your attention.",
+      };
+    case "Archive":
+      return {
+        eyebrow: "Archive",
+        title: "A quiet shelf for finished challenges.",
+        subtitle:
+          "Completed and archived challenges stay available for reflection without crowding your daily focus.",
+      };
+    case "Stats":
+      return {
+        eyebrow: "Stats",
+        title: "Your progress, without the spreadsheet energy.",
+        subtitle:
+          "A simple read on streaks, completion rate, and active commitments across your personal challenges.",
+      };
+    case "Settings":
+      return {
+        eyebrow: "Settings",
+        title: "Keep the app feeling like yours.",
+        subtitle:
+          "Adjust appearance and review privacy details. Everything still stays on this device.",
+      };
+  }
 }
 
 function StatsStrip({
@@ -439,6 +519,166 @@ function StatsStrip({
         );
       })}
     </div>
+  );
+}
+
+function StatsOverview({
+  activeChallenges,
+  bestStreak,
+  completionRate,
+  totalChallenges,
+}: {
+  activeChallenges: number;
+  bestStreak: number;
+  completionRate: number;
+  totalChallenges: number;
+}) {
+  const insights = [
+    {
+      label: "Best streak",
+      value: `${bestStreak} days`,
+      description: bestStreak === 0 ? "Start one challenge to begin building streaks." : "Your strongest current run.",
+      icon: Flame,
+    },
+    {
+      label: "Completion rate",
+      value: `${completionRate}%`,
+      description: completionRate === 0 ? "No completed days yet." : "Completed days across every challenge.",
+      icon: Trophy,
+    },
+    {
+      label: "Active load",
+      value: `${activeChallenges}/${totalChallenges}`,
+      description: activeChallenges === 0 ? "No active commitments right now." : "Active challenges out of all local challenges.",
+      icon: Target,
+    },
+  ];
+
+  return (
+    <section className="mt-8 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-4 md:grid-cols-3">
+        {insights.map((insight) => {
+          const Icon = insight.icon;
+
+          return (
+            <motion.article
+              className="rounded-[28px] border border-stone-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.06]"
+              key={insight.label}
+              whileHover={{ y: -3, scale: 1.01 }}
+            >
+              <span className="grid size-12 place-items-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300">
+                <Icon size={22} />
+              </span>
+              <p className="mt-6 text-sm font-extrabold uppercase tracking-[0.12em] text-stone-400">{insight.label}</p>
+              <strong className="mt-2 block text-4xl font-black tracking-[-0.04em]">{insight.value}</strong>
+              <p className="mt-3 text-sm leading-6 text-stone-500 dark:text-stone-400">{insight.description}</p>
+            </motion.article>
+          );
+        })}
+      </div>
+
+      <motion.article
+        className="rounded-[32px] border border-stone-200 bg-white p-6 shadow-soft dark:border-white/10 dark:bg-white/[0.06]"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-400">Local summary</p>
+            <h2 className="mt-1 text-2xl font-black tracking-tight">At a glance</h2>
+          </div>
+          <BarChart3 className="text-blue-600" size={28} />
+        </div>
+        <div className="mt-6 space-y-4">
+          {[
+            ["Total challenges", totalChallenges],
+            ["Active challenges", activeChallenges],
+            ["Archived challenges", Math.max(0, totalChallenges - activeChallenges)],
+          ].map(([label, value]) => (
+            <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3 dark:bg-white/10" key={label}>
+              <span className="text-sm font-bold text-stone-500 dark:text-stone-400">{label}</span>
+              <span className="text-lg font-black">{value}</span>
+            </div>
+          ))}
+        </div>
+      </motion.article>
+    </section>
+  );
+}
+
+function SettingsPanel({
+  isDark,
+  totalChallenges,
+  onToggleTheme,
+}: {
+  isDark: boolean;
+  totalChallenges: number;
+  onToggleTheme: () => void;
+}) {
+  return (
+    <section className="mt-8 grid gap-4 lg:grid-cols-2">
+      <motion.article
+        className="rounded-[32px] border border-stone-200 bg-white p-6 shadow-soft dark:border-white/10 dark:bg-white/[0.06]"
+        whileHover={{ y: -2 }}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-400">Appearance</p>
+            <h2 className="mt-1 text-2xl font-black tracking-tight">Theme</h2>
+            <p className="mt-3 text-sm leading-6 text-stone-500 dark:text-stone-400">
+              Switch between a warm light interface and a softer dark mode.
+            </p>
+          </div>
+          <button
+            className="grid size-14 place-items-center rounded-2xl bg-stone-950 text-white transition hover:-translate-y-0.5 hover:shadow-soft dark:bg-white dark:text-stone-950"
+            type="button"
+            onClick={onToggleTheme}
+            aria-label="Toggle dark mode"
+          >
+            {isDark ? <Sun size={22} /> : <Moon size={22} />}
+          </button>
+        </div>
+      </motion.article>
+
+      <motion.article
+        className="rounded-[32px] border border-stone-200 bg-white p-6 shadow-soft dark:border-white/10 dark:bg-white/[0.06]"
+        whileHover={{ y: -2 }}
+      >
+        <span className="grid size-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300">
+          <Lock size={22} />
+        </span>
+        <p className="mt-6 text-xs font-extrabold uppercase tracking-[0.12em] text-stone-400">Storage</p>
+        <h2 className="mt-1 text-2xl font-black tracking-tight">Private on this device</h2>
+        <p className="mt-3 text-sm leading-6 text-stone-500 dark:text-stone-400">
+          {totalChallenges} challenge{totalChallenges === 1 ? "" : "s"} stored locally in IndexedDB. No account,
+          analytics, backend, or cloud sync.
+        </p>
+      </motion.article>
+    </section>
+  );
+}
+
+function SectionEmptyState({
+  description,
+  icon: Icon,
+  title,
+}: {
+  description: string;
+  icon: typeof CalendarDays;
+  title: string;
+}) {
+  return (
+    <motion.section
+      className="mt-8 rounded-[32px] border border-stone-200 bg-white p-8 text-center shadow-soft dark:border-white/10 dark:bg-white/[0.06]"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+    >
+      <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-stone-100 text-stone-500 dark:bg-white/10 dark:text-stone-300">
+        <Icon size={24} />
+      </span>
+      <h2 className="mt-5 text-2xl font-black tracking-tight">{title}</h2>
+      <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-stone-500 dark:text-stone-400">{description}</p>
+    </motion.section>
   );
 }
 
