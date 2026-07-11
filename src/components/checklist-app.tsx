@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   Clock3,
+  Trash2,
   Flame,
   LayoutList,
   Lock,
@@ -34,7 +35,7 @@ import {
   normalizeChecklist,
   setChallengeDay,
 } from "@/src/lib/checklists";
-import { getChecklists, saveChecklist } from "@/src/lib/indexed-db";
+import { getChecklists, removeChecklist, saveChecklist } from "@/src/lib/indexed-db";
 import { registerServiceWorker } from "@/src/lib/service-worker";
 import type { ChallengeDayStatus, Checklist } from "@/src/types";
 
@@ -152,6 +153,23 @@ export function ChecklistApp() {
     setLoggingChallengeId(null);
   }
 
+  function deleteChallenge(checklist: Checklist) {
+    const confirmed = window.confirm(`Delete "${checklist.title}"? This cannot be undone.`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setChecklists((current) => current.filter((item) => item.id !== checklist.id));
+    setSelectedId(null);
+    setLoggingChallengeId(null);
+    setView("dashboard");
+    setStorageError(null);
+    void removeChecklist(checklist.id).catch(() =>
+      setStorageError("The challenge was removed from the app, but local storage did not confirm deletion."),
+    );
+  }
+
   return (
     <main className={isDark ? "dark" : ""}>
       <div className="min-h-screen bg-stone-50 text-stone-950 transition-colors duration-200 dark:bg-[#11100f] dark:text-stone-50">
@@ -253,7 +271,12 @@ export function ChecklistApp() {
             ) : null}
 
             {view === "detail" && selectedChecklist ? (
-              <ChallengePreview checklist={selectedChecklist} todayKey={todayKey} onBack={() => setView("dashboard")} />
+              <ChallengePreview
+                checklist={selectedChecklist}
+                todayKey={todayKey}
+                onBack={() => setView("dashboard")}
+                onDelete={() => deleteChallenge(selectedChecklist)}
+              />
             ) : null}
           </section>
         </div>
@@ -999,23 +1022,35 @@ function ChallengePreview({
   checklist,
   todayKey,
   onBack,
+  onDelete,
 }: {
   checklist: Checklist;
   todayKey: string;
   onBack: () => void;
+  onDelete: () => void;
 }) {
   const stats = getChallengeStats(checklist, todayKey);
 
   return (
     <section className="py-8">
-      <button
-        className="mb-5 inline-flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-extrabold transition hover:-translate-y-0.5 hover:shadow-soft dark:border-white/10 dark:bg-white/[0.06]"
-        type="button"
-        onClick={onBack}
-      >
-        <ChevronLeft size={18} />
-        Back
-      </button>
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          className="inline-flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-extrabold transition hover:-translate-y-0.5 hover:shadow-soft dark:border-white/10 dark:bg-white/[0.06]"
+          type="button"
+          onClick={onBack}
+        >
+          <ChevronLeft size={18} />
+          Back
+        </button>
+        <button
+          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-extrabold text-rose-700 transition hover:-translate-y-0.5 hover:bg-rose-100 hover:shadow-soft dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-300"
+          type="button"
+          onClick={onDelete}
+        >
+          <Trash2 size={18} />
+          Delete Challenge
+        </button>
+      </div>
       <div className="rounded-[36px] border border-stone-200 bg-white p-7 shadow-soft dark:border-white/10 dark:bg-white/[0.06] sm:p-10">
         <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700 dark:bg-blue-400/10 dark:text-blue-300">
           {stats.status}
