@@ -30,3 +30,12 @@ __pycache__/
 
 # SQLite
 *.db
+
+# VS Code
+.vscode/
+
+# Coverage reports
+coverage/
+
+# Turbopack cache (if you use it)
+.turbo/
