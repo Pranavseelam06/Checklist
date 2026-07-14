@@ -9,6 +9,7 @@ import {
   Check,
   CheckCircle2,
   ChevronLeft,
+  ChevronRight,
   Clock3,
   Trash2,
   Flame,
@@ -26,14 +27,18 @@ import {
   XCircle,
 } from "lucide-react";
 import {
+  addDays,
   createChecklist,
+  diffInDays,
   formatDisplayDate,
   getChallengeStats,
   getDayRecord,
   getTodayKey,
   matchesQuery,
   normalizeChecklist,
+  parseDateKey,
   setChallengeDay,
+  toDateKey,
 } from "@/src/lib/checklists";
 import { getChecklists, removeChecklist, saveChecklist } from "@/src/lib/indexed-db";
 import { registerServiceWorker } from "@/src/lib/service-worker";
@@ -64,6 +69,7 @@ export function ChecklistApp() {
   const [activeSection, setActiveSection] = useState<NavSection>("Today");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loggingChallengeId, setLoggingChallengeId] = useState<string | null>(null);
+  const [selectedLogDate, setSelectedLogDate] = useState(() => getTodayKey());
   const [isLoading, setIsLoading] = useState(true);
   const [isDark, setIsDark] = useState(false);
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -148,9 +154,22 @@ export function ChecklistApp() {
     }
   }
 
-  function logToday(checklist: Checklist, status: ChallengeDayStatus) {
-    replaceChecklist(setChallengeDay(checklist, todayKey, status));
+  function logSelectedDay(checklist: Checklist, status: ChallengeDayStatus) {
+    replaceChecklist(setChallengeDay(checklist, selectedLogDate, status));
     setLoggingChallengeId(null);
+  }
+
+  function selectLogDate(date: string) {
+    if (!date) {
+      return;
+    }
+
+    setSelectedLogDate(diffInDays(todayKey, date) > 0 ? todayKey : date);
+    setLoggingChallengeId(null);
+  }
+
+  function moveLogDate(days: number) {
+    selectLogDate(toDateKey(addDays(parseDateKey(selectedLogDate), days)));
   }
 
   function deleteChallenge(checklist: Checklist) {
@@ -247,6 +266,7 @@ export function ChecklistApp() {
                 completionRate={completionRate}
                 isDark={isDark}
                 isLoading={isLoading}
+                selectedLogDate={selectedLogDate}
                 query={query}
                 todayKey={todayKey}
                 totalChallenges={checklists.length}
@@ -256,7 +276,9 @@ export function ChecklistApp() {
                   setView("detail");
                 }}
                 loggingChallengeId={loggingChallengeId}
-                onLogToday={logToday}
+                onLogToday={logSelectedDay}
+                onLogDateChange={selectLogDate}
+                onMoveLogDate={moveLogDate}
                 onQueryChange={setQuery}
                 onToggleLog={(id) =>
                   setLoggingChallengeId((currentId) => (currentId === id ? null : id))
@@ -333,6 +355,7 @@ function DashboardView({
   completionRate,
   isDark,
   isLoading,
+  selectedLogDate,
   query,
   todayKey,
   totalChallenges,
@@ -340,6 +363,8 @@ function DashboardView({
   onOpen,
   loggingChallengeId,
   onLogToday,
+  onLogDateChange,
+  onMoveLogDate,
   onQueryChange,
   onToggleLog,
   onTemplateCreate,
@@ -352,6 +377,7 @@ function DashboardView({
   completionRate: number;
   isDark: boolean;
   isLoading: boolean;
+  selectedLogDate: string;
   query: string;
   todayKey: string;
   totalChallenges: number;
@@ -359,6 +385,8 @@ function DashboardView({
   onOpen: (id: string) => void;
   loggingChallengeId: string | null;
   onLogToday: (checklist: Checklist, status: ChallengeDayStatus) => void;
+  onLogDateChange: (date: string) => void;
+  onMoveLogDate: (days: number) => void;
   onQueryChange: (query: string) => void;
   onToggleLog: (id: string) => void;
   onTemplateCreate: (title: string, durationDays: number) => void;
@@ -440,6 +468,15 @@ function DashboardView({
         isEmpty={isEmpty}
       />
 
+      {showChallengeCards ? (
+        <LogDateControls
+          selectedLogDate={selectedLogDate}
+          todayKey={todayKey}
+          onChange={onLogDateChange}
+          onMove={onMoveLogDate}
+        />
+      ) : null}
+
       {isLoading ? (
         <p className="mt-8 text-sm font-semibold text-stone-500">Loading your local challenges...</p>
       ) : null}
@@ -469,6 +506,7 @@ function DashboardView({
               index={index}
               key={checklist.id}
               isLogging={loggingChallengeId === checklist.id}
+              selectedLogDate={selectedLogDate}
               todayKey={todayKey}
               onLogToday={(status) => onLogToday(checklist, status)}
               onOpen={() => onOpen(checklist.id)}
@@ -575,6 +613,76 @@ function StatsStrip({
         );
       })}
     </div>
+  );
+}
+
+function LogDateControls({
+  selectedLogDate,
+  todayKey,
+  onChange,
+  onMove,
+}: {
+  selectedLogDate: string;
+  todayKey: string;
+  onChange: (date: string) => void;
+  onMove: (days: number) => void;
+}) {
+  const isToday = selectedLogDate === todayKey;
+
+  return (
+    <section className="mt-8 rounded-[28px] border border-stone-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-blue-600 dark:text-blue-300">
+            Log date
+          </p>
+          <h2 className="mt-1 text-2xl font-black tracking-tight">
+            {isToday ? "Recording today" : `Recording ${formatDisplayDate(selectedLogDate)}`}
+          </h2>
+          <p className="mt-1 text-sm font-semibold text-stone-500 dark:text-stone-400">
+            Forgot yesterday? Pick an older day here, then answer Yes or No on a challenge card.
+          </p>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,180px)_auto_auto]">
+          <button
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-stone-50 px-3 text-sm font-extrabold transition hover:-translate-y-0.5 hover:shadow-sm dark:border-white/10 dark:bg-white/10"
+            type="button"
+            onClick={() => onMove(-1)}
+            aria-label="Previous day"
+          >
+            <ChevronLeft size={18} />
+            Previous
+          </button>
+          <input
+            className="min-h-11 rounded-2xl border border-stone-200 bg-stone-50 px-3 text-sm font-extrabold dark:border-white/10 dark:bg-white/10"
+            max={todayKey}
+            type="date"
+            value={selectedLogDate}
+            onChange={(event) => onChange(event.target.value)}
+            aria-label="Choose date to log"
+          />
+          <button
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-stone-50 px-3 text-sm font-extrabold transition hover:-translate-y-0.5 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/10"
+            disabled={isToday}
+            type="button"
+            onClick={() => onMove(1)}
+            aria-label="Next day"
+          >
+            Next
+            <ChevronRight size={18} />
+          </button>
+          <button
+            className="min-h-11 rounded-2xl bg-blue-600 px-4 text-sm font-extrabold text-white shadow-lg shadow-blue-600/20 transition hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isToday}
+            type="button"
+            onClick={() => onChange(todayKey)}
+          >
+            Today
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -841,6 +949,7 @@ function ChallengeCard({
   checklist,
   index,
   isLogging,
+  selectedLogDate,
   todayKey,
   onLogToday,
   onOpen,
@@ -849,16 +958,23 @@ function ChallengeCard({
   checklist: Checklist;
   index: number;
   isLogging: boolean;
+  selectedLogDate: string;
   todayKey: string;
   onLogToday: (status: ChallengeDayStatus) => void;
   onOpen: () => void;
   onToggleLog: () => void;
 }) {
   const stats = getChallengeStats(checklist, todayKey);
-  const todayRecord = getDayRecord(checklist, todayKey);
-  const canLogToday = stats.status === "Active";
+  const selectedDayRecord = getDayRecord(checklist, selectedLogDate);
+  const selectedDateIndex = diffInDays(stats.startDate, selectedLogDate);
+  const isFutureDate = diffInDays(todayKey, selectedLogDate) > 0;
+  const canLogSelectedDate =
+    !checklist.archived &&
+    selectedDateIndex >= 0 &&
+    selectedDateIndex < stats.durationDays &&
+    !isFutureDate;
   const todayLabel =
-    todayRecord?.status === "complete" ? "Yes" : todayRecord?.status === "missed" ? "No" : "Log today";
+    selectedDayRecord?.status === "complete" ? "Yes" : selectedDayRecord?.status === "missed" ? "No" : "Log day";
 
   return (
     <motion.article
@@ -871,18 +987,18 @@ function ChallengeCard({
       <div className="flex items-center justify-between gap-3">
         <button
           className={`inline-flex min-h-9 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-extrabold transition ${
-            canLogToday
+            canLogSelectedDate
               ? "bg-blue-50 text-blue-700 hover:-translate-y-0.5 hover:bg-blue-100 hover:shadow-sm dark:bg-blue-400/10 dark:text-blue-300 dark:hover:bg-blue-400/20"
               : "bg-stone-100 text-stone-500 dark:bg-white/10 dark:text-stone-400"
           }`}
-          disabled={!canLogToday}
+          disabled={!canLogSelectedDate}
           type="button"
           onClick={onToggleLog}
           aria-expanded={isLogging}
-          aria-label={`Log today for ${checklist.title}`}
+          aria-label={`Log ${formatDisplayDate(selectedLogDate)} for ${checklist.title}`}
         >
-          <span>{stats.status}</span>
-          {canLogToday ? <span className="rounded-full bg-white/80 px-2 py-0.5 dark:bg-white/10">{todayLabel}</span> : null}
+          <span>{canLogSelectedDate ? `Day ${selectedDateIndex + 1}` : stats.status}</span>
+          {canLogSelectedDate ? <span className="rounded-full bg-white/80 px-2 py-0.5 dark:bg-white/10">{todayLabel}</span> : null}
         </button>
         <span className="text-sm font-bold text-stone-400">Day {stats.currentDay || 1}</span>
       </div>
@@ -895,12 +1011,12 @@ function ChallengeCard({
           transition={{ duration: 0.16 }}
         >
           <p className="mb-2 text-sm font-black text-stone-800 dark:text-stone-100">
-            Did you do this challenge today?
+            Did you do this on {formatDisplayDate(selectedLogDate)}?
           </p>
           <div className="grid grid-cols-2 gap-2">
             <button
               className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl text-sm font-extrabold transition hover:-translate-y-0.5 ${
-                todayRecord?.status === "complete"
+                selectedDayRecord?.status === "complete"
                   ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"
                   : "bg-white text-emerald-700 hover:shadow-sm dark:bg-white/10 dark:text-emerald-300"
               }`}
@@ -912,7 +1028,7 @@ function ChallengeCard({
             </button>
             <button
               className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl text-sm font-extrabold transition hover:-translate-y-0.5 ${
-                todayRecord?.status === "missed"
+                selectedDayRecord?.status === "missed"
                   ? "bg-rose-600 text-white shadow-lg shadow-rose-600/20"
                   : "bg-white text-rose-700 hover:shadow-sm dark:bg-white/10 dark:text-rose-300"
               }`}
@@ -923,9 +1039,9 @@ function ChallengeCard({
               No
             </button>
           </div>
-          {todayRecord ? (
+          {selectedDayRecord ? (
             <p className="mt-2 text-xs font-semibold text-stone-500 dark:text-stone-400">
-              Already saved for today. Pick the other option to change it.
+              Already saved for this day. Pick the other option to change it.
             </p>
           ) : null}
         </motion.div>
